@@ -1,0 +1,846 @@
+particles=[
+    'B0',
+    'kst',
+    'a1',
+    'tau1_1', 
+    'tau1_2', 
+    'pi1_2_3',
+    'pi1_2_1',  
+    'pi1_2_2', 
+    'pi1_1_4',
+    'pi_1_2_4', 
+    'pi1_1_1',
+    'pi1_1_2', 
+    'pi1_1_3']  #a veces el pion_4 no existe
+
+pions=[
+    'pi1_1_1',
+    'pi1_1_2',  
+    'pi1_1_3', 
+    'pi1_1_4',
+    'pi1_2_1', 
+    'pi1_2_2',
+    'pi1_2_3', 
+    'pi1_2_4']  #a veces el pion_4 no existe
+
+color = [
+    '#1f77b4',  # Azul
+    '#A30000',  # Rojo
+    '#2ca02c',  # Verde
+    '#8c564b',  # Marrón
+    '#ff7f0e',  # Naranja
+    '#00BFBF',  
+    '#8FBC8F',  
+    '#7f7f7f'   # Gris
+]
+
+estaciones=['1', '2', '3', '4']
+
+
+def find_pi(pikey,hit):
+  pidkey = 0
+  for dkey in hit:
+    if not ('pi' in dkey): continue
+    #print(pikey,dkey,hit[dkey]['key'])
+    if int(pikey)==hit[dkey]['key']: pidkey = dkey;break
+  if not pidkey: return 0,0,0
+  a1k,tauk,bla = pidkey.split("_")
+  #print(a1k,tauk,bla)
+  a1kn = a1k.replace("pi1","a1") #RETOQUÉ FUNC ORIGINAL
+  tauk = a1k.replace("pi","tau")+"_"+tauk
+  return hit[a1kn],hit[tauk],hit[pidkey]
+
+
+SUPERL = 0
+
+## events with at least hits from two pions
+if SUPERL: hitsl = hits
+else: hitsl = [hit for hit in hits if len(hit['hits'])>1]
+
+## events where at least two pions have at least three hits
+hitsl1 = []
+for hit in hitsl:
+  i1=0
+  for pi in hit['hits']:
+    if len(hit['hits'][pi])>2: i1+=1
+  if SUPERL and i1>0: hitsl1.append(hit)
+  if (not SUPERL) and i1>1: hitsl1.append(hit)
+
+
+## events where the pions producing hits come from the same tau
+hitsl2 = []
+w1 = 0
+for hit in hitsl1:
+  i1=0
+  mytau = 0
+  for pik in hit['hits']:
+    if len(hit['hits'][pik])>2:
+      a1,tau,pi = find_pi(pik,hit)
+      if not tau: w1+=1;continue
+      if mytau:
+        if mytau==tau['key']: i1+=1
+      else: mytau=tau['key'];i1+=1
+  if (not SUPERL) and i1>1: hitsl2.append(hit)
+  if (SUPERL): hitsl2.append(hit)
+
+
+## facer event displays chulos, por exemplo
+## todos os hits dun mesmo a1, e as traxectorias reais dos pions asociados
+
+## probabilidade de ter hits en estacions por pion, dependendo de,
+# a) momento do pion
+# b) origin vertex do pion
+'''retocar fucnion cadena'''  
+def cadena(evento):
+    '''Funcion para mostrar todas las particulas que tienen hits asociados y sus hijas''' 
+    print('DECAY: ')
+    '''
+    for key in evento['hits'].keys():
+        cadena=[]
+        for i in range(1,5): #bucle por todas las estaciones, a la primera que salga el print se sale del bucle
+            for j in range(len(evento['hits'][str(key)][str(i)])): #itero en todos los hits
+                    eve= evento['hits'][str(key)][str(i)][j]['eves'][4]
+                    cadena.append(eve)
+                    
+        print(key, ' ---> ', cadena)'''
+            
+def funcion_lineal(x, m, b):
+    return m * x + b
+    
+def ajuste(puntos, errores=[None,None,None]):
+    X=np.array(puntos)
+    errores=np.array(errores)
+    
+    x= X[:,0]
+    y= X[:,1]
+    z= X[:,2]
+    point=X[0,:]
+
+    params_ZX, _ = curve_fit(funcion_lineal, z, x)
+    params_ZY, _ = curve_fit(funcion_lineal, z, y)
+
+    m_ZX, b_ZX = params_ZX
+    m_ZY, b_ZY = params_ZY
+
+    x_fit = m_ZX * z + b_ZX
+    y_fit = m_ZY * z + b_ZY
+
+    if errores.any() != None:
+        errores=np.array(errores)
+        sx=errores[:,0]
+        sy=errores[:,1]
+        chi2 = np.sum(((x - x_fit) / sx)**2 + ((y - y_fit) / sy)**2 )/(len(x)-2) #divido por grados de libertad
+        ssd = np.sum((x - x_fit)**2 + (y - y_fit)**2)
+
+    else: chi2=None; ssd=None
+
+    return [m_ZX, b_ZX, m_ZY, b_ZY] , chi2, ssd
+
+
+
+def plot_recta(punto, pendiente, z_min, z_max=19200):
+    t_x, t_y, t_z = pendiente
+    z = np.linspace(z_min, z_max, 100)
+    x = punto[0] + t_x * (z - punto[2]) / t_z
+    y = punto[1] + t_y * (z - punto[2]) / t_z
+    return x,y,z
+
+def media_err(puntos, errores):
+
+    puntos = np.array(puntos)
+    errores = np.array(errores)
+    
+    # Separar las coordenadas y sus errores
+    x, y, z = puntos[:, 0], puntos[:, 1], puntos[:, 2]
+    sigma_x, sigma_y, sigma_z = errores[:, 0], errores[:, 1], errores[:,2]
+    
+    # Calcular la media ponderada para x y y
+    media_x = np.sum(x / sigma_x**2) / np.sum(1 / sigma_x**2)
+    media_y = np.sum(y / sigma_y**2) / np.sum(1 / sigma_y**2)
+    
+    # Calcular la media aritmética para z (sin ponderar porque no hay incertidumbre en z)
+    if all(sigma_z) != 0:
+        media_z = np.sum(z / sigma_z**2) / np.sum(1 / sigma_z**2)
+    else: media_z = np.mean(z)
+    
+    # Calcular el error estándar de la media ponderada para x y y
+    error_x = np.sqrt(1 / np.sum(1 / sigma_x**2))
+    error_y = np.sqrt(1 / np.sum(1 / sigma_y**2))
+    
+    # No hay error estándar para z porque no hay incertidumbre en z
+    if all(sigma_z)!=0: error_z = np.sqrt(1 / np.sum(1 / sigma_z**2))
+    else: error_z=0
+    
+    # Retornar las medias ponderadas y los errores estándar
+    medias = [media_x, media_y, media_z]
+    errores_ponderados = [error_x, error_y, error_z]
+    return medias, errores_ponderados
+
+def clusters_bayesian_gmm(X, max_components=4):
+    # Inicializar el modelo Bayesian Gaussian Mixture
+    X=np.array(X)
+    bgm = BayesianGaussianMixture(n_components=max_components, random_state=0)
+    bgm.fit(X)
+    weights = np.round(bgm.weights_,2)
+    n_clusters_ = (weights > 0.03).sum()
+    #print('Estimated number of clusters: ' + str(n_clusters_))
+    bgm2= BayesianGaussianMixture(n_components=n_clusters_, random_state=0)
+    bgm2.fit(X)
+    labels = bgm2.predict(X)
+    centroides = bgm2.means_
+    weights = np.round(bgm2.weights_,2)
+    puntos= Counter(labels)
+    covars= bgm2.covariances_
+    
+    incertidumbres = []
+    for i in range(len(centroides)):
+        # Extraer la matriz de covarianza del cluster i-ésimo
+        cov_matrix = covars[i]
+        # Número de puntos en el cluster
+        num_puntos = puntos[i]
+        # Calcular la incertidumbre como la raíz cuadrada de los elementos de la diagonal de la covarianza
+        if num_puntos != 0:
+            std_devs = np.sqrt(np.diag(cov_matrix) / num_puntos).tolist()
+            incertidumbres.append(std_devs)
+        else:
+            incertidumbres.append([None] * len(cov_matrix))
+
+    
+    min_points_threshold = len(X) / 10 # Umbral mínimo de puntos en un cluster (1/5 del total)
+
+    # Filtrar centroides e incertidumbres para eliminar entradas inválidas
+    centroides_filtrados = []
+    incertidumbres_filtradas = []
+    for i in range(len(centroides)):
+        if not np.isnan(centroides[i]).any() and None not in incertidumbres[i]:
+            if puntos[i] >= min_points_threshold:
+                centroides_filtrados.append(centroides[i].tolist())
+                incertidumbres_filtradas.append(incertidumbres[i])
+    return centroides_filtrados, labels, weights, puntos, covars, incertidumbres_filtradas
+
+def clusters_bayesian_gmm2(data, max_components=5):
+    # Convertir los datos a un array numpy
+    x = np.array(data)
+    # Usar solo las variables x e y para los clusters
+    X = x[:, :-1]  # Asumiendo que x, y son las primeras dos columnas y z es la tercera
+    
+    # Inicializar el modelo Bayesian Gaussian Mixture
+    bgm = BayesianGaussianMixture(n_components=max_components, random_state=0)
+    bgm.fit(X)
+    weights = np.round(bgm.weights_, 2)
+    n_clusters_ = (weights > 0.03).sum()
+    
+    # Ajustar el modelo con el número estimado de clusters
+    bgm2 = BayesianGaussianMixture(n_components=n_clusters_, random_state=0)
+    bgm2.fit(X)
+    labels = bgm2.predict(X)
+    centroides = bgm2.means_
+    weights = np.round(bgm2.weights_, 2)
+    puntos = Counter(labels)
+    covars = bgm2.covariances_
+
+    incertidumbres = []
+    centroides_completos = []
+    for i in range(len(centroides)):
+        # Extraer la matriz de covarianza del cluster i-ésimo
+        cov_matrix = covars[i]
+        # Número de puntos en el cluster
+        num_puntos = puntos[i]
+        
+        # Calcular la incertidumbre como la raíz cuadrada de los elementos de la diagonal de la covarianza
+        if num_puntos != 0:
+            std_devs = np.sqrt(np.diag(cov_matrix) / num_puntos).tolist()
+            # Añadir incertidumbre en z
+            z_vals = x[labels == i, -1]
+            z_std_dev = np.std(z_vals) / np.sqrt(num_puntos)
+            std_devs.append(z_std_dev)
+            incertidumbres.append(std_devs)
+            
+            # Calcular la media de la variable z para cada centroide
+            z_mean = z_vals.mean()  # Promedio de la variable z para el centroide
+            centroide_completo = np.append(centroides[i], z_mean)
+            centroides_completos.append(centroide_completo)
+        else:
+            incertidumbres.append([None] * (len(cov_matrix) + 1))
+            centroides_completos.append(np.append(centroides[i], np.nan))
+
+    min_points_threshold = len(X) / 15  # Umbral mínimo de puntos en un cluster (1/5 del total)
+
+    # Filtrar centroides e incertidumbres para eliminar entradas inválidas
+    centroides_filtrados = []
+    incertidumbres_filtradas = []
+    for i in range(len(centroides)):
+        if not np.isnan(centroides_completos[i]).any() and None not in incertidumbres[i]:
+            if puntos[i] >= min_points_threshold:
+                centroides_filtrados.append(centroides_completos[i].tolist())
+                incertidumbres_filtradas.append(incertidumbres[i])
+                
+    return centroides_filtrados, labels, weights, puntos, covars, incertidumbres_filtradas
+DEBUG = False
+def get_vertex(pxs,pys,pzs,txs,tys,tzs):
+    #func XABI
+    ## return vertex, input
+    # pxs,pyz,pzs, coordinates x,y and z of a point of every line
+    # txs,tyz,tzs, slopes x,y and z of every line, must be normalized so that txs[i]**2+tys[i]**2+tzs[i]**2 = 1
+   allpoints = [pxs,pys,pzs]
+   allslopes = [txs,tys,tzs]
+   m = len(pxs)
+   coef = [np.zeros(3) for x in range(3)]
+   for i in range(3):
+      for j in range(3):
+         if i==j: coef[i][j] = m -reduce(lambda a,b: a+b,map(lambda c: c**2,allslopes[j]))
+         else: coef[i][j] = -reduce(lambda a,b: a+b,map(lambda c,d: c*d,allslopes[i],allslopes[j]))
+   ## value of terms (from equation in the web above)
+   terms = np.zeros(3)
+   for i in range(3):
+      if DEBUG: print("********")
+      fterm = reduce(lambda a,b: a+b,allpoints[i])
+      if DEBUG: print(fterm)
+      sterm = 0
+      if DEBUG: print("----")
+      for j in range(3):
+         if DEBUG: print(map(lambda c,d,e: c*d*e,allpoints[j],allslopes[j],allslopes[i]))
+         if DEBUG: print(reduce(lambda a,b: a+b,map(lambda c,d,e: c*d*e,allpoints[j],allslopes[j],allslopes[i])))
+         sterm += reduce(lambda a,b: a+b,map(lambda c,d,e: c*d*e,allpoints[j],allslopes[j],allslopes[i]))
+      if DEBUG: print("----")
+      if DEBUG: print(sterm)
+      terms[i] = fterm-sterm
+   if DEBUG: print(coef, terms)
+   return np.linalg.solve(coef, terms).tolist()
+
+def getDOCA_and_z(pxs,pys,pzs,txs,tys,tzs):
+    '''
+    Calculates the DOCA for a pair of tracks and finds the z-coordinate where this minimum distance occurs.
+    Input:
+      - points: a list of two points, each a 3D vector [x, y, z], representing the reference points on the two tracks.
+      - directions: a list of two directional unit vectors, each a 3D vector [ux, uy, uz], indicating the direction of the tracks.
+    Returns:
+      - A tuple containing the DOCA and the z-coordinate where this DOCA occurs.
+    '''
+    u1 = np.array([txs[0], tys[0], tzs[0]])
+    u2 = np.array([txs[1], tys[1], tzs[1]])
+    r1, r2 = np.array([pxs[0], pys[0], pzs[0]]), np.array([pxs[1], pys[1], pzs[1]])
+    
+    # Vector between the two reference points
+    r1_r2 = r1 - r2
+    
+    # Dot products needed for calculations
+    u1_dot_u2 = np.dot(u1, u2)
+    r1_r2_dot_u1 = np.dot(r1_r2, u1)
+    r1_r2_dot_u2 = np.dot(r1_r2, u2)
+    
+    # Calculate t and s
+    denominator = 1 - u1_dot_u2**2
+    
+    if abs(denominator) < 1e-10:
+        # Lines are parallel; just use the perpendicular distance
+        doca = np.linalg.norm(r1_r2 - (r1_r2_dot_u1 * u1))
+        return doca, None  # No specific z since lines are parallel
+    
+    
+    s = (r1_r2_dot_u2 - r1_r2_dot_u1 * u1_dot_u2) / denominator
+    t = s*u1_dot_u2-np.dot(u1,r1_r2)
+    
+    # Points on each line at DOCA
+    point_on_line1 = r1 + t * u1
+    point_on_line2 = r2 + s * u2
+    
+    # Calculate the DOCA
+    doca_vector = point_on_line1 - point_on_line2
+    doca = np.linalg.norm(doca_vector)
+    
+    # Both points should have approximately the same z-coordinate
+    z_at_doca = (point_on_line1[2] + point_on_line2[2]) / 2
+    
+    return doca, z_at_doca
+
+def getDOCA(pxs,pys,pzs,txs,tys,tzs):
+   #func Carlos
+    p1 = np.array([txs[0], tys[0], tzs[0]])
+    p2 = np.array([txs[1], tys[1], tzs[1]])
+    pos1, pos2 = np.array([pxs[0], pys[0], pzs[0]]), np.array([pxs[1], pys[1], pzs[1]])
+    P1P2 = pos1 - pos2
+    normp1 = p1/np.sqrt(np.dot(p1,p1))
+    normp2 = p2/np.sqrt(np.dot(p2,p2))
+    n = np.cross(normp1, normp2)
+    return abs(np.dot(P1P2, n))/np.sqrt(np.dot(n, n))
+
+def normalize(vector):
+    norm = np.linalg.norm(vector)
+    if norm == 0: 
+       return vector
+    return vector / norm
+
+def reconstr_3_est(evento):
+    '''Esta funcion le paso un evento, 
+    reconstruye la trayectoria del pion con hits en 3 estaciones,
+    y me devuelve su trayectoria y el chi_2'''
+
+    keys_3_est=[]
+    piones_con_choque_3_est=0
+    vals_3_est=[]
+    chi2_3_est=[]
+    ssd_3_est=[]
+    ov=[]
+    i=0
+    for pion in pions:
+        try:
+            key=evento[pion]['key']
+            puntos_ajuste=[]
+            errores_ajuste=[]
+
+            if len(evento['hits'][str(key)])>2: #para que solo lo haga con el pion con choques en 3 estaciones
+                keys_3_est.append(str(key))
+                piones_con_choque_3_est+=1
+                ov.append(evento[pion]['ov'])
+
+                for estacion in estaciones: #itero para cada estacion del detector
+                    try: 
+                        evento['hits'][str(key)][estacion]
+
+                        vals_x=[]; vals_y=[]; vals_z=[]
+                        err_x=[]; err_y=[]; err_z=[]
+                    
+                        for k in evento['hits'][str(key)][estacion]: #itero para las posiciones medidas en esa estacion
+
+                            x, y, z = k['x'][0], k['y'][0], k['x'][2]
+                            sx, sy, sz = k['x'][1], k['y'][1], 0
+                            vals_x.append(x); vals_y.append(y); vals_z.append(z)
+                            err_x.append(sx); err_y.append(sy); err_z.append(sz)
+
+                        data=np.array([vals_x, vals_y, vals_z]).T
+                        err=np.array([err_x, err_y, err_z]).T
+
+                        if  len(vals_x)>3: # condicion para asegurarme de que numero de samples > max_components
+                            centroides, labels, weights, puntos, covars, incertidumbres = clusters_bayesian_gmm2(data)
+                            indice_centroide_mas_grande = max(puntos, key=puntos.get)
+                            puntos_ajuste.append(centroides[indice_centroide_mas_grande]) #tengo el centroide del cluster mas grande para hacer el ajuste
+                            errores_ajuste.append(incertidumbres[indice_centroide_mas_grande])
+                        else:
+                            media, error= media_err(data, err)
+                            puntos_ajuste.append(media)
+                            errores_ajuste.append(error)
+                
+                                
+                    except KeyError: continue
+                
+                puntos_ajuste= np.array(puntos_ajuste)
+                vals_ajuste, chi2_ajuste, ssd_ajuste = ajuste(puntos_ajuste, errores=errores_ajuste)
+                vals_3_est.append(vals_ajuste)
+                chi2_3_est.append(chi2_ajuste)
+                ssd_3_est.append(ssd_ajuste)
+                
+                i+=1
+
+        except KeyError as e:
+            #print('No existe {}'.format(pion))
+            continue
+    
+    chi2_minimo=min(chi2_3_est)
+    indice_min_chi2=chi2_3_est.index(chi2_minimo)
+    key, vals_ajuste, ssd, ov = keys_3_est[indice_min_chi2], vals_3_est[indice_min_chi2], ssd_3_est[indice_min_chi2], ov[indice_min_chi2]
+    pxs, pys, pzs = vals_ajuste[1], vals_ajuste[3], 0
+    txs, tys, tzs = normalize(np.array([vals_ajuste[0], vals_ajuste[2], 1])).tolist()
+    
+    return [pxs, pys, pzs], [txs, tys, tzs], chi2_minimo, ssd, ov, key
+
+
+def reconstr_3_est2(evento):
+    '''Funcion mejorada, combina todos los clusters posibles y se queda con el de mejor chi2'''
+
+    keys_3_est=[]
+    vals_3_est=[]
+    chi2_3_est=[]
+    ssd_3_est=[]
+    ov=[]
+    muon_keys=[]
+    
+
+    for pion in pions:
+        try:
+            key=evento[pion]['key']
+            puntos_ajuste=[[],[],[],[]]
+            errores_ajuste=[[],[],[],[]]
+
+            if len(evento['hits'][str(key)])>2: #para que solo lo haga con el pion con choques en 3 estaciones
+                keys_3_est.append(str(key))
+                ov.append(evento[pion]['ov'])
+
+                if abs(evento[pion]['pid'])==13: #si hay algún muón guardo el key
+                    muon_keys.append(str(key))
+
+                for estacion in estaciones: #itero para cada estacion del detector
+                    try: 
+                        evento['hits'][str(key)][estacion]
+
+                        data=[]
+                        err=[]
+                
+                        for k in evento['hits'][str(key)][estacion]: #itero para las posiciones medidas en esa estacion
+                            x, y, z = k['x'][0], k['y'][0], k['x'][2]
+                            sx, sy, sz = k['x'][1], k['y'][1], 0
+                            data.append([x,y,z])
+                            err.append([sx,sy,sz])
+                            
+
+                        if  len(data) > 7: # condicion para asegurarme de que numero de samples > max_components
+                            centroides, labels, weights, puntos, covars, incertidumbres = clusters_bayesian_gmm(data)
+                            indice_centroide_mas_grande = max(puntos, key=puntos.get)
+                            puntos_ajuste[int(estacion)-1] = centroides + [media_err(centroides, incertidumbres)[0]]
+                            errores_ajuste[int(estacion)-1] = incertidumbres + [media_err(centroides, incertidumbres)[1]]
+
+
+                        else:
+                            puntos_ajuste[int(estacion)-1] = data + [media_err(data, err)[0]]
+                            errores_ajuste[int(estacion)-1] = err + [media_err(data, err)[1]]
+
+                                
+                    except KeyError: continue
+                
+            
+                
+                puntos_ajuste = [puntos for puntos in puntos_ajuste if puntos != []]
+                errores_ajuste = [puntos for puntos in errores_ajuste if puntos != []]
+
+                
+                combinaciones = list(product(*puntos_ajuste))
+                err_combinaciones=list(product(*errores_ajuste))
+
+                ajustes=[]; chi2=[]; ssd=[]
+                c=0
+                for comb in combinaciones:
+                    try:
+                        aj=ajuste(np.array(comb), np.array(err_combinaciones[c]))
+                        ajustes.append(aj[0]) 
+                        chi2.append(aj[1])
+                        ssd.append(aj[2])
+                    except IndexError: print('========');print('index: ',c); print(comb); print(err_combinaciones)
+                    c+=1
+                
+                vals_3_est.append(ajustes) #guardo las combinaciones de ajustes para cada particula
+                chi2_3_est.append(chi2)
+                ssd_3_est.append(ssd)
+
+        except KeyError as e:
+            #print('No existe {}'.format(pion))
+            continue
+    
+    indices = [None, None]
+    min_chi2=10E12
+    for j in range(len(vals_3_est)): #itero en particulas 
+        for k in range(len(vals_3_est[j])): #itero en los ajustes posibles para esa particula
+            if chi2_3_est[j][k] < min_chi2: 
+                min_chi2=chi2_3_est[j][k]
+                indices=[j , k]
+    
+    key, vals_ajuste, ssd, ov = keys_3_est[indices[0]], vals_3_est[indices[0]][indices[1]], ssd_3_est[indices[0]][indices[1]], ov[indices[0]]
+    pxs, pys, pzs = vals_ajuste[1], vals_ajuste[3], 0
+    txs, tys, tzs = normalize(np.array([vals_ajuste[0], vals_ajuste[2], 1])).tolist()
+    
+    return [pxs, pys, pzs], [txs, tys, tzs], min_chi2, ssd, ov, key
+
+def reconstr_2_est(evento):
+    key_3_est = evento['key_3_est'] #el key de la particula con la que reconstruimos la recta que pasa por 3 est
+    punto_3_est = evento['punto_3_est']
+    pendiente_3_est = evento['pendiente_3_est']
+
+    vals=[]
+    keys=[]
+    hit_zs=[] #posicion z de todos os hits
+    i=0
+    
+    
+    for pion in pions:
+        try:
+            key=evento[pion]['key']
+            puntos_ajuste=[[],[],[],[]] #4 estacions
+
+            for estacion in estaciones: #itero para cada estacion del detector
+                try: 
+                    evento['hits'][str(key)][estacion]
+                    data=[]
+                
+                    for k in evento['hits'][str(key)][estacion]: #itero para las posiciones medidas en esa estacion
+
+                        x, y, z = k['x'][0], k['y'][0], k['x'][2]
+                        data.append([x,y,z])
+                        hit_zs.append(z)
+
+                    if  len(data)>7: # condicion para asegurarme de que numero de samples > max_components
+                        centroides, labels, weights, puntos, covars, incertidumbres = clusters_bayesian_gmm(data)
+                        puntos_ajuste[int(estacion)-1]=centroides + [np.mean(centroides, axis=0).tolist()] #añado tambien el punto medio de los centroides por si ajusta mejor
+       
+                    else:
+                        puntos_ajuste[int(estacion)-1]=data + [np.mean(data, axis=0).tolist()] #añado el punto medio tambien
+                    
+                except KeyError: continue
+            
+            puntos_ajuste = [puntos for puntos in puntos_ajuste if puntos != []]
+            
+  
+            if (str(key) != str(key_3_est)) & (len(puntos_ajuste)>1): #para que no coja el mismo pion que en la recta que ya tenemos y que omita las particulas con hits en menos de dos estaciones
+
+                keys.append(str(key)) #guardo key pion
+                combinaciones = list(product(*puntos_ajuste))
+                ajustes=[]
+                for comb in combinaciones:
+                    ajustes.append(ajuste(np.array(comb))[0]) #guardo solo resultado ajuste, no chi2 ni ssd
+                
+                i+=1
+                vals.append(ajustes) #guardo las combinaciones de ajustes para cada particula
+            
+
+        except KeyError as e:
+            #print('No existe {}'.format(pion))
+            continue
+    
+    z_first_hit= np.min(hit_zs)#almaceno el z del primer hit para hacer corte después
+
+    DOCAS=[]
+    z_DOCAS=[]
+    vertices=[]
+    pendientes=[]
+    puntos=[]
+
+
+    for j in range(len(vals)): #calculo todos los parametros para las distintas combinaciones
+        DOCAS_1=[]
+        z_DOCAS_1=[]
+        vertices_1=[]
+        pendientes_1=[]
+        puntos_1=[]
+        for k in range(len(vals[j])):
+            pxs, pys, pzs= [punto_3_est[0], vals[j][k][1]],[punto_3_est[1], vals[j][k][3]],[punto_3_est[2],0]
+            txs, tys, tzs= [],[],[]  
+            
+            pendiente_3d_2hit = normalize(np.array([vals[j][k][0], vals[j][k][2], 1])).tolist()
+            txs.append(pendiente_3_est[0]) ; tys.append(pendiente_3_est[1]); tzs.append(pendiente_3_est[2])
+            txs.append(pendiente_3d_2hit[0]) ; tys.append(pendiente_3d_2hit[1]); tzs.append(pendiente_3d_2hit[2])
+        
+            vals_vertex = get_vertex(pxs, pys, pzs, txs, tys, tzs) 
+            vals_DOCA, z_DOCA = getDOCA_and_z(pxs, pys, pzs, txs, tys, tzs) 
+    
+            pendientes_1.append([pendiente_3d_2hit[0],pendiente_3d_2hit[1], pendiente_3d_2hit[2]]) #guardo la pendiente y puntos de las rectas para cada combinacion 
+            puntos_1.append([vals[j][k][1],vals[j][k][3],0])
+            DOCAS_1.append(vals_DOCA)
+            vertices_1.append(vals_vertex)
+            z_DOCAS_1.append(z_DOCA)
+
+        DOCAS.append(DOCAS_1); z_DOCAS.append(z_DOCAS_1); vertices.append(vertices_1); pendientes.append(pendientes_1); puntos.append(puntos_1) #guardo toda la info para cada combinacion y particula
+    
+        
+    indices = [None, None]
+    min_DOCAS=10E6
+    for j in range(len(DOCAS)): #me quedo solo con la reconstruccion que tiene DOCA menor y cumple corte en vertice
+        for k in range(len(DOCAS[j])):
+            if (vertices[j][k][2]-z_first_hit < 0) & (np.abs(vertices[j][k][2]-z_first_hit) < 600) & (DOCAS[j][k] < min_DOCAS): #vertice detras del primer hit y doca minimo 
+                min_DOCAS=DOCAS[j][k]
+                indices=[j , k]
+    
+    min_DOCAS=10E6
+    if indices == [None, None]: #cojo la particula con menor DOCA aunque no cumpla corte del first hit
+        for j in range(len(DOCAS)): 
+            for k in range(len(DOCAS[j])):
+                if  (DOCAS[j][k] < min_DOCAS): 
+                    min_DOCAS=DOCAS[j][k]
+                    indices=[j , k]
+
+        
+
+    if indices != [None, None]: #alguna particula cumple el corte
+        vals_vertex=vertices[indices[0]][indices[1]]
+        vals_DOCA=DOCAS[indices[0]][indices[1]]
+        z_DOCA=z_DOCAS[indices[0]][indices[1]]
+        pendiente=pendientes[indices[0]][indices[1]]
+        punto=puntos[indices[0]][indices[1]]
+        key=keys[indices[0]]
+
+
+    else:
+        vals_vertex=None
+        vals_DOCA=None
+        z_DOCA=None
+        pendiente=None
+        punto=None
+
+        
+
+    return  punto, pendiente, vals_vertex, vals_DOCA, z_DOCA, z_first_hit, key #retorna valores para plot recta 3 est, recta 2 est y parametros utiles
+
+def plots(evento, est=True, trayectorias_reales=False, savefig = False, show=True):
+
+    if savefig == False:
+
+        fig3 = plt.figure(figsize=(15, 5))
+        ax3=fig3.add_subplot(131,projection='3d')
+        ax2=fig3.add_subplot(132)
+        ax1=fig3.add_subplot(133)
+
+    elif savefig == True:
+
+        fig3 = plt.figure(figsize=(6, 5))
+        fig1 = plt.figure(figsize=(6, 5))
+        fig2 = plt.figure(figsize=(6, 5))
+        ax3 = fig3.add_subplot(111, projection='3d')
+        ax2 = fig2.add_subplot(111)
+        ax1 = fig1.add_subplot(111)
+
+
+
+    try: 
+        
+        ax3.scatter(evento['ov'][2], evento['ov'][1], evento['ov'][0], marker='D', s=10, c='red', label='real vertex')
+        ax1.scatter(evento['ov'][2], evento['ov'][0], marker='D', s=10, c='red', label='real vertex')
+        ax2.scatter(evento['ov'][2], evento['ov'][1],  marker='D', s=10, c='red', label='real vertex')
+
+        ax1.axvline(x=16000, color='lightgrey', linestyle='-', linewidth=2.5)
+        ax1.axvline(x=17200, color='lightgrey', linestyle='-', linewidth=2.5)
+        ax1.axvline(x=18200, color='lightgrey', linestyle='-', linewidth=2.5)
+        ax2.axvline(x=16000, color='lightgrey', linestyle='-', linewidth=2.5)
+        ax2.axvline(x=17200, color='lightgrey', linestyle='-', linewidth=2.5)
+        ax2.axvline(x=18200, color='lightgrey', linestyle='-', linewidth=2.5)
+
+        ax3.scatter(evento['vertex'][2], evento['vertex'][1], evento['vertex'][0],marker='D', s=10,c='black', label='reconstructed vertex, DOCA={}'.format(np.round(evento['DOCA'],0)))
+        ax1.scatter(evento['vertex'][2], evento['vertex'][0], marker='D',s=10, c='black', label='reconstructed vertex')
+        ax2.scatter(evento['vertex'][2], evento['vertex'][1], marker='D', s=10, c='black',  label='reconstructed vertex')
+       
+        ax1.axvline(x=evento['z_DOCA'], color='k', linestyle='--', linewidth=1.5, alpha=0.7, c='black', label='DOCA={}'.format(np.round(evento['DOCA'],0)))
+        ax2.axvline(x=evento['z_DOCA'], color='k', linestyle='--', linewidth=1.5, alpha=0.7, label='DOCA={}'.format(np.round(evento['DOCA'],0)))
+
+    except TypeError: print('No se ha podido reconstruir este evento')
+
+
+    i=0
+    minz=100000; minx=0; miny=0; maxz=1000; maxx=0; maxy=0
+    for pion in pions:
+        try:
+            key=evento[pion]['key']
+
+            #=========================PLOT OV-EV RECTA ==============
+            ov = evento[pion]['ov']
+            ev = evento[pion]['ev']
+
+            x=np.array([ov[0], ev[0]])
+            y=np.array([ov[1],ev[1]])
+            z=np.array([ov[2],ev[2]])
+            
+            if (abs(evento[pion]['pid'])==211) & (trayectorias_reales==True):
+                ax3.plot(z, y, x, c=color[i],linestyle='-', linewidth=1, label=pion)
+                ax1.plot(z, x, c=color[i],linestyle='-', linewidth=1, label=pion)
+                ax2.plot(z, y, c=color[i],linestyle='-', linewidth=1, label=pion)
+            if abs(evento[pion]['pid'])==211: #truco para que salgan en la leyenda 
+                ax3.scatter(0,0,0,s=7, alpha=0.7, c=color[i], label=pion)
+                ax2.scatter(0,0,s=7, alpha=0.7, c=color[i], label=pion)
+                ax1.scatter(0,0,s=7, alpha=0.7, c=color[i], label=pion)
+
+            if abs(evento[pion]['pid'])==13: #truco para que salgan en la leyenda , muon
+                ax3.scatter(0,0,0,s=7, alpha=0.7, c=color[i], label=pion+str(', muon'))
+                ax2.scatter(0,0,s=7, alpha=0.7, c=color[i], label=pion+str(', muon'))
+                ax1.scatter(0,0,s=7, alpha=0.7, c=color[i], label=pion+str(', muon'))
+
+            #==========================PLOT AJUSTE 3 EST ==============
+            if str(key) == evento['key_3_est'] :
+                vals=plot_recta(evento['punto_3_est'], evento['pendiente_3_est'], z_min=min(ov[2], evento['vertex'][2]))
+                ax3.plot(vals[2], vals[1], vals[0], c=color[i], linewidth=0.8, linestyle='--', label='ajuste 3 est')
+                ax1.plot(vals[2], vals[0],c=color[i],linewidth=0.8, linestyle='--', label='ajuste 3 est')
+                ax2.plot(vals[2], vals[1],c=color[i],linewidth=0.8, linestyle='--', label='ajuste 3 est')
+
+            #==========================PLOT AJUSTE 2 EST===============
+            if str(key) == evento['key_2_est']:
+                vals=plot_recta(evento['punto_2_est'], evento['pendiente_2_est'], z_min=min(ov[2], evento['vertex'][2]))
+                ax3.plot(vals[2], vals[1], vals[0], c=color[i], linewidth=0.8, linestyle='--', label='ajuste 2 est')
+                ax1.plot(vals[2], vals[0], c=color[i], linewidth=0.8, linestyle='--', label='ajuste 2 est')
+                ax2.plot(vals[2], vals[1], c=color[i], linewidth=0.8, linestyle='--', label='ajuste 2 est')
+                
+            
+
+            for estacion in estaciones: #itero para cada estacion del detector
+                try: 
+                    evento['hits'][str(key)][estacion]
+
+                    for k in evento['hits'][str(key)][estacion]: #itero para las posiciones medidas en esa estacion
+
+                        x, y, z = k['x'][0], k['y'][0], k['x'][2]
+                        #if abs(evento[pion]['pid'])==211: #pion
+                        ax3.scatter(z, y, x, s=7, alpha=0.7, c=color[i]) #hago el plot de cada punto medido (hit)
+                        ax1.scatter(z, x, s=7, alpha=0.7, c=color[i])
+                        ax2.scatter(z, y, s=7, alpha=0.7, c=color[i])
+                    
+                        if x < minx: minx=x
+                        if y < miny: miny=y
+                        if z < minz: minz=z
+                        if x > maxx: maxx=x
+                        if y > maxy: maxy=y
+                        if z > maxz: maxz=z
+
+                except KeyError:  continue
+
+            i+=1
+        except KeyError as e:
+            #print('No existe {}'.format(pion))
+            continue
+        
+    #plano de las estaciones
+    estaciones_z=[16000, 17200, 18200]
+    if minz>16000: minz=15800 #para que los limites de las estaciones entren en el plot
+    if maxz<18200: maxz=18400
+    if evento['ov'][2]<minz: minz=evento['ov'][2]
+    try:
+        if evento['vertex'][2]<minz: minz=evento['vertex'][2]
+    except: TypeError
+    
+    ax3.set_xlim(minz, maxz)   
+    ax3.set_ylim(miny, maxy)  
+    ax3.set_zlim(minx, maxx)  
+
+    ax1.set_xlim(minz-500, maxz+500)   
+    ax1.set_ylim(minx-500, maxx+500)  
+     
+    ax2.set_xlim(minz-500, maxz+500)   
+    ax2.set_ylim(miny-500, maxy+500)  
+     
+    
+    if est==True:
+        for z_plane in estaciones_z:
+            xx, yy = np.meshgrid(np.linspace(ax3.get_zlim()[0], ax3.get_zlim()[1], 10),
+                                np.linspace(ax3.get_ylim()[0], ax3.get_ylim()[1], 10))
+            zz = np.full_like(xx, z_plane)
+            ax3.plot_surface(zz, yy, xx, alpha=0.1, rstride=100, cstride=100, color='gray')
+    
+    ax3.set_xlabel('Z')
+    ax3.set_ylabel('Y')
+    ax3.set_zlabel('X')
+    
+    ax1.set_xlabel('Z')
+    ax1.set_ylabel('X')
+    ax2.set_xlabel('Z')
+    ax2.set_ylabel('Y')
+    
+    if savefig == False:
+        plt.tight_layout(rect=[0, 0, 1, 0.95])  # Ajuste automático para no solapar la leyenda
+        plt.subplots_adjust(bottom=0.2)  # Espacio adicional en la parte inferior para las leyendas
+
+        ax1.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=1, frameon=False)
+        ax2.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=1, frameon=False)
+        ax3.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=1, frameon=False)
+
+        fig3.suptitle('evtNum:{} & runNum:{} '.format(evento['evtNum'], evento['runNum']), fontsize=16, y=1.02)  # y controla la posición vertical del título
+
+        
+
+    elif savefig == True:
+
+        ax1.legend(loc='upper right', bbox_to_anchor=(1.4,1))
+        ax2.legend(loc='upper right', bbox_to_anchor=(1.4,1))
+        ax3.legend(loc='upper right', bbox_to_anchor=(2,0.8))
+
+        fig3.savefig("/home3/alberto.martinez/TFG/plots/{}_{}_ZYX.png".format(evento['evtNum'], evento['runNum']), bbox_inches='tight', dpi=300)
+        fig2.savefig("/home3/alberto.martinez/TFG/plots/{}_{}_ZY.png".format(evento['evtNum'], evento['runNum']), bbox_inches='tight', dpi=300)
+        fig1.savefig("/home3/alberto.martinez/TFG/plots/{}_{}_ZX.png".format(evento['evtNum'], evento['runNum']), bbox_inches='tight', dpi=300)
+
+    if show == False:
+        plt.close(fig1)
+        plt.close(fig2)
+        plt.close(fig3)
+    elif show == True:
+        plt.show()
