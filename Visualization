@@ -1,0 +1,258 @@
+particles=[
+    'B0',
+    'kst',
+    'a1',
+    'tau1_1', 
+    'tau1_2', 
+    'pi1_2_3',
+    'pi1_2_1',  
+    'pi1_2_2', 
+    'pi1_1_4',
+    'pi_1_2_4', 
+    'pi1_1_1',
+    'pi1_1_2', 
+    'pi1_1_3']  #a veces el pion_4 no existe
+
+pions=[
+    'pi1_1_1',
+    'pi1_1_2',  
+    'pi1_1_3', 
+    'pi1_1_4',
+    'pi1_2_1', 
+    'pi1_2_2',
+    'pi1_2_3', 
+    'pi1_2_4']  #a veces el pion_4 no existe
+
+markers=['o', 's', '^', '*']
+
+pions_dict={'pi1_1_1': r'$\pi_{1}$ from $\tau_{1}$',
+    'pi1_1_2' : r'$\pi_{2}$ from $\tau_{1}$',  
+    'pi1_1_3': r'$\pi_{3}$ from $\tau_{1}$', 
+    'pi1_1_4': r'$\pi_{4}$ from $\tau_{1}$',
+    'pi1_2_1': r'$\pi_{1}$ from $\tau_{2}$', 
+    'pi1_2_2': r'$\pi_{2}$ from $\tau_{2}$',
+    'pi1_2_3': r'$\pi_{3}$ from $\tau_{2}$', 
+    'pi1_2_4': r'$\pi_{4}$ from $\tau_{2}$'}
+
+muons_dict={'pi1_1_1': r'$\mu$ from $\tau_{1}$',
+    'pi1_1_2' : r'$\mu$ from $\tau_{1}$',  
+    'pi1_1_3': r'$\mu$ from $\tau_{1}$', 
+    'pi1_1_4': r'$\mu$ from $\tau_{1}$',
+    'pi1_2_1': r'$\mu$ from $\tau_{2}$', 
+    'pi1_2_2': r'$\mu$ from $\tau_{2}$',
+    'pi1_2_3': r'$\mu$ from $\tau_{2}$', 
+    'pi1_2_4': r'$\mu$ from $\tau_{2}$'}
+
+color = [
+    'b',  # Azul
+    '#BF0000',  # Rojo
+    '#8AED1A',  # Verde
+    'm',  #rosa
+    '#FFAD15',  # Naranja
+    '#05D3D7',  #azul claro
+    '#F7F700',  #amarillo
+    '#00733D'   # Violeta
+]
+
+estaciones=['1', '2', '3', '4']
+def gaussian(x, amp, mu, sigma):
+    return amp * np.exp(-(x - mu) ** 2 / (2 * sigma ** 2))
+
+def plot_recta(punto, pendiente, z_min, z_max=19200):
+    t_x, t_y, t_z = pendiente
+    z = np.linspace(z_min, z_max, 100)
+    x = punto[0] + t_x * (z - punto[2]) / t_z
+    y = punto[1] + t_y * (z - punto[2]) / t_z
+    return x,y,z
+
+def plots(evento, est=True, trayectorias_reales=False, savefig = False, show=True):
+
+    if savefig == False:
+
+        fig3 = plt.figure(figsize=(15, 5))
+        ax3=fig3.add_subplot(131,projection='3d')
+        ax2=fig3.add_subplot(132)
+        ax1=fig3.add_subplot(133)
+
+    elif savefig == True:
+
+        fig3 = plt.figure(figsize=(6, 5), dpi=300)
+        fig1 = plt.figure(figsize=(6, 5), dpi=300)
+        fig2 = plt.figure(figsize=(6, 5), dpi=300)
+        ax3 = fig3.add_subplot(111, projection='3d')
+        ax2 = fig2.add_subplot(111)
+        ax1 = fig1.add_subplot(111)
+
+
+
+    try: 
+        
+        ax3.scatter(evento['ov'][2], evento['ov'][1], evento['ov'][0], marker='D', s=10, c='red', label='DV (True Displaced Vertex)')
+        ax1.scatter(evento['ov'][2], evento['ov'][0], marker='D', s=10, c='red', label='DV (True Displaced Vertex)')
+        ax2.scatter(evento['ov'][2], evento['ov'][1],  marker='D', s=10, c='red', label='DV (True Displaced Vertex)')
+
+        ax3.scatter(evento['vertex'][2], evento['vertex'][1], evento['vertex'][0],marker='D', s=10,c='black', label='RDV (Reconstructed Displaced Vertex)\nDOCA={}'.format(np.round(evento['DOCA'],0)))
+        ax1.scatter(evento['vertex'][2], evento['vertex'][0], marker='D',s=10, c='black', label='RDV (Reconstructed Displaced Vertex)\nDOCA={}'.format(np.round(evento['DOCA'],0)))
+        ax2.scatter(evento['vertex'][2], evento['vertex'][1], marker='D', s=10, c='black',  label='RDV (Reconstructed Displaced Vertex)\nDOCA={}'.format(np.round(evento['DOCA'],0)))
+       
+        #ax1.axvline(x=evento['z_DOCA'], color='k', linestyle='--', linewidth=1.5, alpha=0.7, c='black', label='DOCA={}'.format(np.round(evento['DOCA'],0)))
+        #ax2.axvline(x=evento['z_DOCA'], color='k', linestyle='--', linewidth=1.5, alpha=0.7, label='DOCA={}'.format(np.round(evento['DOCA'],0)))
+
+    except TypeError: print('No se ha podido reconstruir este evento')
+
+
+    i=0
+    minz=100000; minx=2000; miny=2000; maxz=1000; maxx=-2000; maxy=-2000
+    for pion in pions:
+        try:
+            key=evento[pion]['key']
+
+            #=========================PLOT OV-EV RECTA ==============
+            ov = evento[pion]['ov']
+            ev = evento[pion]['ev']
+
+            x=np.array([ov[0], ev[0]])
+            y=np.array([ov[1],ev[1]])
+            z=np.array([ov[2],ev[2]])
+            
+            if (np.abs(evento[pion]['pid'])==211) & (trayectorias_reales==True):
+                ax3.plot(z, y, x, c=color[i],linestyle='-', linewidth=1, label=pions_dict[pion])
+                ax1.plot(z, x, c=color[i],linestyle='-', linewidth=1, label=pions_dict[pion])
+                ax2.plot(z, y, c=color[i],linestyle='-', linewidth=1, label=pions_dict[pion])
+
+            if np.abs(evento[pion]['pid'])==211: #truco para que salgan en la leyenda 
+                ax3.scatter(0,0,0,s=7, alpha=0.7, c=color[i], label=pions_dict[pion])
+                ax2.scatter(0,0,s=7, alpha=0.7, c=color[i], label=pions_dict[pion])
+                ax1.scatter(0,0,s=7, alpha=0.7, c=color[i], label=pions_dict[pion])
+
+            if np.abs(evento[pion]['pid'])==13: #truco para que salgan en la leyenda , muon
+                ax3.scatter(0,0,0,s=7, alpha=0.7, c=color[i], label=muons_dict[pion])
+                ax2.scatter(0,0,s=7, alpha=0.7, c=color[i], label=muons_dict[pion])
+                ax1.scatter(0,0,s=7, alpha=0.7, c=color[i], label=muons_dict[pion])
+                
+    
+
+            for estacion in estaciones: #itero para cada estacion del detector
+                try: 
+                    evento['hits'][str(key)][estacion]
+
+                    for k in evento['hits'][str(key)][estacion]: #itero para las posiciones medidas en esa estacion
+
+                        x, y, z = k['x'][0], k['y'][0], k['x'][2]
+                        #if abs(evento[pion]['pid'])==211: #pion
+                        ax3.scatter(z, y, x, marker=markers[int(estacion)-1], s=8, alpha=0.7, c=color[i]) #hago el plot de cada punto medido (hit)
+                        ax1.scatter(z, x, marker=markers[int(estacion)-1], s=15, alpha=0.7, c=color[i])
+                        ax2.scatter(z, y, marker=markers[int(estacion)-1], s=15, alpha=0.7, c=color[i])
+                    
+                        if x < minx: minx=x
+                        if y < miny: miny=y
+                        if z < minz: minz=z
+                        if x > maxx: maxx=x
+                        if y > maxy: maxy=y
+                        if z > maxz: maxz=z
+
+                except KeyError:  continue
+
+            i+=1
+        except KeyError as e:
+            #print('No existe {}'.format(pion))
+            continue
+
+    i=0
+    for pion in pions:
+        try:
+            key=evento[pion]['key']
+            ov = evento[pion]['ov']
+
+            #==========================PLOT AJUSTE 3 EST ==============
+            if str(key) == evento['key_3_est'] :
+                vals=plot_recta(evento['punto_3_est'], evento['pendiente_3_est'], z_min=min(ov[2], evento['vertex'][2]))
+                ax3.plot(vals[2], vals[1], vals[0], c=color[i], linewidth=0.8, linestyle='--', label='Fit 3 stations')
+                ax1.plot(vals[2], vals[0],c=color[i],linewidth=0.8, linestyle='--', label='Fit 3 stations')
+                ax2.plot(vals[2], vals[1],c=color[i],linewidth=0.8, linestyle='--', label='Fit 3 stations')
+
+            #==========================PLOT AJUSTE 2 EST===============
+            if str(key) == evento['key_2_est']:
+                vals=plot_recta(evento['punto_2_est'], evento['pendiente_2_est'], z_min=min(ov[2], evento['vertex'][2]))
+                ax3.plot(vals[2], vals[1], vals[0], c=color[i], linewidth=0.8, linestyle='--', label='Fit 2 stations')
+                ax1.plot(vals[2], vals[0], c=color[i], linewidth=0.8, linestyle='--', label='Fit 2 stations')
+                ax2.plot(vals[2], vals[1], c=color[i], linewidth=0.8, linestyle='--', label='Fit 2 stations')
+            
+            i+=1
+        except KeyError as e:
+            #print('No existe {}'.format(pion))
+            continue
+                
+            
+        
+    #plano de las estaciones
+    estaciones_z=[16000, 17200, 18400]
+    if minz>16000: minz=15800 #para que los limites de las estaciones entren en el plot
+    if maxz<18200: maxz=18400
+    if evento['ov'][2]<minz: minz=evento['ov'][2]
+    try:
+        ax1.axvline(x=16000, color='grey', alpha=0.5, linestyle='-', linewidth=2.5)
+        ax1.axvline(x=17200, color='grey', alpha=0.5,  linestyle='-', linewidth=2.5)
+        ax1.axvline(x=18400, color='grey', alpha=0.5,  linestyle='-', linewidth=2.5)
+        ax2.axvline(x=16000, color='grey', alpha=0.5,  linestyle='-', linewidth=2.5)
+        ax2.axvline(x=17200, color='grey', alpha=0.5,  linestyle='-', linewidth=2.5)
+        ax2.axvline(x=18400, color='grey', alpha=0.5,  linestyle='-', linewidth=2.5)
+        
+        if evento['vertex'][2]<minz: minz=evento['vertex'][2]
+    except: TypeError
+    
+    ax3.set_xlim(minz, maxz)   
+    ax3.set_ylim(miny, maxy)  
+    ax3.set_zlim(minx, maxx)  
+
+    ax1.set_xlim(minz-500, maxz+500)   
+    ax1.set_ylim(minx-50, maxx+50)  
+     
+    ax2.set_xlim(minz-500, maxz+500)   
+    ax2.set_ylim(miny-50, maxy+50)  
+     
+    
+    if est==True:
+        for z_plane in estaciones_z:
+            xx, yy = np.meshgrid(np.linspace(ax3.get_zlim()[0], ax3.get_zlim()[1], 10),
+                                np.linspace(ax3.get_ylim()[0], ax3.get_ylim()[1], 10))
+            zz = np.full_like(xx, z_plane)
+            ax3.plot_surface(zz, yy, xx, alpha=0.1, rstride=100, cstride=100, color='gray')
+    
+    ax3.set_xlabel('Z (mm)')
+    ax3.set_ylabel('Y (mm)')
+    ax3.set_zlabel('X (mm)')
+    
+    ax1.set_xlabel('Z (mm)', fontsize=16)
+    ax1.set_ylabel('X (mm)', fontsize=16)
+    ax2.set_xlabel('Z (mm)', fontsize=16)
+    ax2.set_ylabel('Y (mm)', fontsize=16)
+    
+    if savefig == False:
+        plt.tight_layout(rect=[0, 0, 1, 0.95])  # Ajuste automático para no solapar la leyenda
+        plt.subplots_adjust(bottom=0.2)  # Espacio adicional en la parte inferior para las leyendas
+
+        ax1.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=1, frameon=False)
+        ax2.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=1, frameon=False)
+        ax3.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=1, frameon=False)
+
+        #fig3.suptitle('evtNum:{} & runNum:{} '.format(evento['evtNum'], evento['runNum']), fontsize=16, y=1.02)  # y controla la posición vertical del título
+
+        
+
+    elif savefig == True:
+
+        #ax1.legend(loc='upper right', bbox_to_anchor=(2,0.8))
+        #ax2.legend(loc='upper right', bbox_to_anchor=(2,0.8))
+        ax3.legend(loc='upper right', bbox_to_anchor=(2,0.8))
+
+        fig3.savefig("/home3/alberto.martinez/TFG/plots/{}_{}_ZYX.png".format(evento['evtNum'], evento['runNum']), bbox_inches='tight', dpi=300)
+        fig2.savefig("/home3/alberto.martinez/TFG/plots/{}_{}_ZY.png".format(evento['evtNum'], evento['runNum']), bbox_inches='tight', dpi=300)
+        fig1.savefig("/home3/alberto.martinez/TFG/plots/{}_{}_ZX.png".format(evento['evtNum'], evento['runNum']), bbox_inches='tight', dpi=300)
+
+    if show == False:
+        plt.close(fig1)
+        plt.close(fig2)
+        plt.close(fig3)
+    elif show == True:
+        plt.show()
