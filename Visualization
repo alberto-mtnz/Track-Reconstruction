@@ -11,7 +11,7 @@ particles=[
     'pi_1_2_4', 
     'pi1_1_1',
     'pi1_1_2', 
-    'pi1_1_3']  #a veces el pion_4 no existe
+    'pi1_1_3']
 
 pions=[
     'pi1_1_1',
@@ -21,7 +21,7 @@ pions=[
     'pi1_2_1', 
     'pi1_2_2',
     'pi1_2_3', 
-    'pi1_2_4']  #a veces el pion_4 no existe
+    'pi1_2_4'] 
 
 markers=['o', 's', '^', '*']
 
